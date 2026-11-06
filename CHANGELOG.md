@@ -2,6 +2,20 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [Unreleased]
+
+## [1.1.0] - 2026-11-06
+
+### Added
+
+- Instructions for AI coding assistants (Claude Code, Cursor, Codex) through [Laravel Boost](https://laravel.com/docs/boost):
+  a guideline that Boost adds to `CLAUDE.md` and `AGENTS.md`, and the `warp-markup-development` skill for building
+  workspaces and testing them. Select `qalainau/filament-warp-markup` in `php artisan boost:install`, or add it to
+  `"packages"` in `boost.json`. See [AI coding assistants (Laravel Boost)](README.md#ai-coding-assistants-laravel-boost).
+
+- `php artisan warp:assign-tenant "App\Models\Team" 1` (with `--dry-run`): for apps that add tenancy later, gives the drawings, pin types and share links saved without a tenant to one team, so the team panel shows them. Revisions, pages and markups move with their drawing. Every row without a tenant moves, in one transaction.
+- README: **Adding tenancy to an app that already has drawings** and **Testing with tenancy** (opening a team's page in a test, and what another team's IDs do: they are treated like deleted ones, not as an error).
+
 ## [1.0.0] - 2026-11-05
 
 ### Added

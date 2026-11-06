@@ -90,6 +90,32 @@ The migration creates the `warp_markup_*` tables (drawings, revisions, sheets, s
 
 > Run `php artisan filament:assets` again after every update of the package.
 
+### AI coding assistants (Laravel Boost)
+
+Warp Markup ships instructions for AI coding assistants such as Claude Code, Cursor and Codex. If your app uses
+[Laravel Boost](https://laravel.com/docs/boost), the assistant learns how to use Warp Markup from them: which classes
+to use, where rules for status changes go, what is easy to get wrong, and how to test a workspace.
+
+- **Guidelines** (`resources/boost/guidelines/core.md`): a short summary that Boost adds to `CLAUDE.md`,
+  `AGENTS.md` and the other agent files. It also points the assistant to this README in `vendor/`, so it reads the
+  documentation of the version you have installed instead of guessing.
+- **Skill** `warp-markup-development` (`resources/boost/skills/`): the steps for adding a workspace, refusing status
+  changes, and writing feature and browser tests. The assistant loads it when it works on a markup workspace.
+
+Boost does not add guidelines of other vendors' packages on its own. When `php artisan boost:install` asks
+"Which third-party AI guidelines/skills would you like to install?", select `qalainau/filament-warp-markup`. To do
+it without the question, add the package to `boost.json` and run the command again:
+
+```json
+{
+    "packages": ["qalainau/filament-warp-markup"]
+}
+```
+
+```bash
+php artisan boost:install --guidelines --skills -n
+```
+
 ## Quick start
 
 **1. Add `HasMarkup` to the model that holds your findings.** It needs a status column (a string or an enum) and whatever else you want to record:
@@ -883,6 +909,65 @@ If you name a relationship that does not exist, the workspace throws an error in
 - **Drawings created from code** belong to the current team when a team panel is open. Where there is no current team (a console command, a queued job, a seeder), pass it: `app(Revisions::class)->createDrawing(['name' => '1F floor plan', 'tenant' => $team], 's3', 'drawings/1f.pdf')`. Drawings without a team (`'tenant' => null`, or created on a panel without tenancy) do not show up on a team panel.
 - **Existing files stay where they are.** Only files uploaded on a team panel go to the team's folder.
 - **Filament resources for the findings model** apply the same scope on their own. Using both is fine.
+
+**Adding tenancy to an app that already has drawings**
+
+Drawings saved before you added `->tenant()` have no team, so a team panel does not show them. Give them to one team with:
+
+```bash
+php artisan warp:assign-tenant "App\Models\Team" 1 --dry-run   # count the rows per table, change nothing
+php artisan warp:assign-tenant "App\Models\Team" 1
+```
+
+The first argument is the tenant model (or its morph alias), the second its key. The command moves **every** row without a tenant in `warp_markup_drawings`, `warp_markup_pin_types` and `warp_markup_shares` (and in the tables of the other Warp plugins you have installed) to that team, in one transaction; rows that already have a team are not touched. Revisions, pages, markups, inspections and sign-offs have no team of their own and stay with their drawing.
+
+- **Your findings are yours to move.** The command only changes Warp's tables. Fill `team_id` of your findings model yourself, or the moved drawings show their pins without the findings behind them.
+- **Pin types.** If the team already has pin types in the same list, the moved ones are added to that list; remove the rows you do not need with *Edit pin list*.
+- **Files stay where they are**, in the folders they were uploaded to. Only new uploads go to the team's folder.
+- **Afterwards, a panel without tenancy still lists them**, as it lists every team's drawings.
+
+**Testing with tenancy**
+
+In a test, sign in as a member and open the team's page by URL. Filament resolves the team from the URL, as it does for a real request:
+
+```php
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Qalainau\FilamentWarpMarkup\Domain\Revisions;
+
+it('shows each team only its own drawings', function () {
+    $alpha = Team::factory()->create(['slug' => 'alpha']);
+    $bravo = Team::factory()->create(['slug' => 'bravo']);
+    $user = User::factory()->hasAttached($alpha)->create();
+
+    Storage::fake('local');
+    $file = fn () => UploadedFile::fake()->image('plan.png', 800, 600)->store('drawings', 'local');
+
+    app(Revisions::class)->createDrawing(['name' => 'Alpha plan', 'tenant' => $alpha], 'local', $file());
+    app(Revisions::class)->createDrawing(['name' => 'Bravo plan', 'tenant' => $bravo], 'local', $file());
+
+    $this->actingAs($user)
+        ->get('/app/alpha/drawings')
+        ->assertOk()
+        ->assertSee('Alpha plan')
+        ->assertDontSee('Bravo plan');
+
+    // Not a member of Bravo: Filament answers 404 before the page opens
+    $this->actingAs($user)->get('/app/bravo/drawings')->assertNotFound();
+});
+```
+
+For Livewire tests of the page, set the panel and the team first: `Filament::setCurrentPanel('app')` and `Filament::setTenant($alpha, isQuiet: true)`. Check your findings through your own Filament resource (`assertCanSeeTableRecords()`) or your model.
+
+Another team's IDs are **not an error**. Every drawing, revision, page and finding ID the browser sends is treated like a deleted one: the workspace answers that it is gone, nothing is read or changed, and no exception is thrown. So in a test, check that nothing changed, not for an exception or a 403/404:
+
+| What | Result |
+| --- | --- |
+| Opening, saving markups on, renaming or deleting another team's drawing, revision or page | Nothing is read or changed. |
+| Status, comments, edit or delete of another team's finding | Nothing changes; the edit and delete actions are hidden (`assertActionHidden('warpMarkupEditFinding', ['finding' => $id])`). |
+| A `?finding=` link to another team's finding | Ignored: the page opens as without the link. |
+| An assignee from another team | Not offered and not saved; no notification is sent. |
+| A team the user does not belong to, in the URL | 404 from Filament. |
 
 ## Working together
 
