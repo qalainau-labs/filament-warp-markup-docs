@@ -44,6 +44,7 @@ Open a floor plan, drop a pin on a crack, attach a photo, mark it fixed, upload 
 - [On phones and tablets](#on-phones-and-tablets)
 - [Using it from code](#using-it-from-code)
 - [Testing](#testing)
+- [Browser tests (JavaScript)](#browser-tests-javascript)
 - [All options](#all-options)
 - [Translations](#translations)
 - [Requirements](#requirements)
@@ -65,6 +66,7 @@ Open a floor plan, drop a pin on a crack, attach a photo, mark it fixed, upload 
 | **Whole drawing sets** | Upload a set of files at once: files whose sheet number is already there become new revisions. Search the text of every PDF page, and keep architectural, MEP and site notes on layers you can hide. |
 | **AI, if you want it** | Optional: Claude (or your own model) suggests the common issue and a title from a site photo, and reads the sheet number and title from a title block. |
 | **Out of the browser** | Export the marked-up PDF (your original PDF, with the markups on top) or a PNG — in the browser, without Chrome on the server. A findings report with a cover, numbered drawings, a crop around every finding and its photos, printable or as a PDF via Browsershot. The findings as CSV for Excel or BCF for BIM tools. |
+| **Browser tests** | A small JavaScript API for Playwright and other browser tests: where a point of the drawing is on the screen, which pins are shown and where, and a promise that waits until loading and saving have finished. |
 
 ![The workspace](https://raw.githubusercontent.com/qalainau-labs/filament-warp-markup-docs/main/art/workspace.png)
 
@@ -1115,6 +1117,54 @@ Call them on the component: `Livewire::test(Drawings::class)->instance()->warpMa
 - **`warpMarkupComment($finding, ?string $body)`**: a comment. Returns `['finding' => […]]`, `['error' => …]` for an empty comment, or `['gone' => true]`.
 - **`warpMarkupFindings($revisionId)`**: the findings list of a revision, `['findings' => [...]]`. Only findings with a shape on that revision are listed.
 - **`warpMarkupFinding($finding)`**: the details of one finding, `['finding' => […]]` or `['gone' => true]`.
+
+## Browser tests (JavaScript)
+
+The drawing and its pins are drawn on a canvas and an SVG layer that is rebuilt as you zoom, so a browser test cannot find "the pin of finding 12" or "the middle of the plan" in the page. The workspace and the form field give your tests three methods instead. They are on the component's Alpine data:
+
+```js
+const markup = () => Alpine.$data(document.querySelector('.fi-warp-mk'))
+```
+
+A full example with Playwright: place a finding in the lower right of the drawing, then open another one by clicking its pin.
+
+```js
+import { test, expect } from '@playwright/test'
+
+const markup = (page, method, args) =>
+    page.evaluate(([method, args]) => Alpine.$data(document.querySelector('.fi-warp-mk'))[method](args), [method, args])
+
+test('a finding is placed on the drawing', async ({ page }) => {
+    await page.goto('/admin/projects/1/drawings')
+    await page.waitForFunction(() => window.Alpine && Alpine.$data(document.querySelector('.fi-warp-mk'))?.ready)
+    await markup(page, 'whenIdle') // the drawing, its pins and the findings are loaded
+
+    // where is 80 % across and 75 % down the page on the screen?
+    const point = await markup(page, 'pointOnDrawing', { x: 0.8, y: 0.75, relative: true })
+    // { x: 1012, y: 640, drawing: { x: 952.4, y: 631.4 }, visible: true }
+
+    await page.keyboard.press('p') // the pin tool
+    await page.mouse.click(point.x, point.y)
+    await page.getByLabel('Title').fill('Loose tile')
+    await page.getByRole('button', { name: 'Create' }).click()
+    await markup(page, 'whenIdle') // saved, and the list and the pins are loaded again
+
+    const pins = await markup(page, 'pinsOnScreen')
+    expect(pins.find((pin) => pin.title === 'Loose tile')).toMatchObject({ status: 'open', visible: true })
+
+    // open another finding by clicking its pin
+    const crack = pins.find((pin) => pin.title === 'Crack above the window')
+    await page.mouse.click(crack.x, crack.y)
+    await markup(page, 'whenIdle')
+    await expect(page.locator('.fi-warp-mk-detail-title')).toContainText('Crack above the window')
+})
+```
+
+- **`pointOnDrawing({ x, y, relative = false, pan = true })`** — returns a promise with the position on the screen of a point of the open page, to click there with a tool (a pin, a stamp, the start of a rectangle). `x` and `y` are in the page's own units: points for a PDF page (1/72 inch, an A3 page is about 1191 × 842), pixels for an image. With `relative: true` they are a share of the page's width and height instead (`0.5, 0.5` is the middle), so the test does not depend on the size of the drawing. The result has `x` and `y` in the same viewport pixels as `getBoundingClientRect()`, `drawing` with the point in page units (the same numbers that are saved in the shape's `geometry`), and `visible`, which is true when a click at `x`, `y` lands on the drawing (not outside the workspace and not under the side panel or a modal). When the point is outside the view, the drawing is moved so the point is in the middle first; pass `pan: false` to measure without moving. It returns `null` when no page is open (still loading, or a drawing without revisions) and for a point outside the page.
+- **`pinsOnScreen({ all = false })`** — the pins on the open page, as an array of `{ key, finding, number, code, title, status, x, y, left, top, width, height, drawing, visible }`. `x` and `y` are the middle of the pin's round head, where a click selects it (and on a finding, opens it); `left`, `top`, `width` and `height` the box around the whole pin, in viewport pixels; `drawing` the tip of the pin in page units. `finding` is the key of the finding as a string, `status` its status value (`'open'`, `'fixed'` …) and `title` its title; a pin that is not a finding (a numbered note, as in the form field) has `finding` and `status` `null` and its note as `title`. `number` is the number shown on the pin and `code` the [pin symbol](#pin-symbols-a-pin-list), or `null`. Only pins whose head is inside the workspace and that no filter hides are returned; with `{ all: true }` the others are there too with `visible: false`. Findings drawn as another shape (a cloud) are not pins and are not listed: open them from the findings list. It reads the drawing as it is now and never moves it, so call it again after zooming, panning or opening another page. Before a page is open it returns `[]`.
+- **`whenIdle({ timeout = 10000 })`** — returns a promise that resolves when nothing is loading (a drawing, a page, the findings, a finding's details, a revision to compare, checklists), no drawn shape is waiting to be saved or being saved, no comment is being sent, no export is running and the drawing has been drawn again. Shapes are saved 0.7 seconds after the last change, and `whenIdle()` waits for that too. It rejects after the timeout. After a Filament action (the finding form, the edit form), wait for the modal to close first and then call `whenIdle()`: the form is yours to fill, so an open modal does not count as busy.
+- The workspace does not replace its element when Livewire updates, but look it up each time anyway, as above. With several workspaces or form fields on one page, pick one with `document.querySelectorAll('.fi-warp-mk')[n]` (the form field also has the class `fi-warp-mk-field`).
+- The rest of the workspace is ordinary HTML: use Playwright locators for the toolbar (`.fi-warp-mk-tool-pin`, or the keyboard shortcuts), the findings list (`.fi-warp-mk-item`) and the details panel (`.fi-warp-mk-detail-title`).
 
 ## All options
 

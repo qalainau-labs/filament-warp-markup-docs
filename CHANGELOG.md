@@ -4,6 +4,15 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-11-06
+
+### Added
+
+- A JavaScript API for browser tests (Playwright and others) on the workspace and the form field:
+  `pointOnDrawing({ x, y, relative })` (where a point of the page is on the screen), `pinsOnScreen()` (the pins with
+  their finding, title, status and the point to click) and `whenIdle()` (waits until loading and saving have
+  finished). See [Browser tests (JavaScript)](README.md#browser-tests-javascript).
+
 ## [1.1.1] - 2026-11-06
 
 ### Changed
