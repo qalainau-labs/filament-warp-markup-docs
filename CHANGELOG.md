@@ -4,6 +4,17 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-11-06
+
+### Changed
+
+- README: a new section "Testing" lists every Filament action of the workspace (`warpMarkupCreateFinding`,
+  `warpMarkupEditFinding`, `warpMarkupDeleteFinding`, `warpMarkupBulkEditFindings`, `warpMarkupShareFindings`,
+  `warpMarkupCreateDrawing`, `warpMarkupEditDrawing`, `warpMarkupDeleteDrawing`, `warpMarkupCreateRevision`,
+  `warpMarkupDeleteRevision`, `warpMarkupUploadDrawings`, `warpMarkupPinTypes`) with what it does, its arguments and
+  its form fields, a full Pest example with `callAction()` / `mountAction()`, and the Livewire methods behind the
+  status buttons, comments and the findings list.
+
 ## [1.1.0] - 2026-11-06
 
 ### Added

@@ -43,6 +43,7 @@ Open a floor plan, drop a pin on a crack, attach a photo, mark it fixed, upload 
 - [Working together](#working-together)
 - [On phones and tablets](#on-phones-and-tablets)
 - [Using it from code](#using-it-from-code)
+- [Testing](#testing)
 - [All options](#all-options)
 - [Translations](#translations)
 - [Requirements](#requirements)
@@ -998,6 +999,122 @@ app(Revisions::class)->addRevision($drawing, 's3', 'drawings/1f-rev-b.pdf', labe
 $sheet = $drawing->currentRevision->sheets()->where('page', 1)->first();
 app(ShapeRepository::class)->placeFinding($sheet, ['key' => Str::random(20), 'type' => 'pin', 'geometry' => ['x' => 420, 'y' => 310]], $defect);
 ```
+
+## Testing
+
+Test the workspace with Livewire on your own page (`Drawings` in the [quick start](#quick-start)). Everything a person does in a modal is a Filament action on the page, so `mountAction()`, `fillForm()`, `callMountedAction()`, `callAction()` and `assertActionHidden()` work as usual. The other buttons (status, comments, the findings list) call Livewire methods; see the end of this section.
+
+### The actions
+
+| Action name | What it does | Arguments | Form fields |
+| --- | --- | --- | --- |
+| `warpMarkupCreateFinding` | Creates a finding and places its shape on a page | `sheet` (a `MarkupSheet` ID) and `shape` (`['key' => …, 'type' => 'pin', 'geometry' => ['x' => …, 'y' => …]]`), both required; optional `title`, `template` (a key of `findingTemplates()`), `inspection` and `item` (a checklist line the finding belongs to) | Your `findingSchema()`, and the template picker when there are templates |
+| `warpMarkupEditFinding` | The edit form of a finding | `finding` (its key) | Your `findingSchema()` |
+| `warpMarkupDeleteFinding` | Deletes a finding, after a confirmation | `finding` | — |
+| `warpMarkupBulkEditFindings` | "Change together": status, assignee and due date of several findings | `findings` (a list of keys, at most 500) | `status`, `assignee` (with `assignee()`; `Markup::NO_ASSIGNEE` removes it), `due` and `clear_due` (with `due()`). Empty fields are not changed |
+| `warpMarkupShareFindings` | Creates a [share link](#share-links-for-people-without-an-account) | `findings` (a list of keys); `assignee` (a user key) to start on a portal link | `name` (required), `days` (7, 30 or 90), `fixed` (a status value), `photos`; with `assignee()` also `scope` (`'selected'` or `'assignee'`) and `assignee` |
+| `warpMarkupCreateDrawing` | Uploads a new drawing | — | `file` (required), `name` (required), `group`, `label` (the revision name) |
+| `warpMarkupEditDrawing` | Renames a drawing, changes its group or order | `drawing` (its ID) | `name` (required), `group`, `sort` |
+| `warpMarkupDeleteDrawing` | Deletes a drawing with its revisions, after a confirmation | `drawing` | — |
+| `warpMarkupCreateRevision` | Uploads a new revision of a drawing | `drawing` | `file` (required), `label`, `note`, `carry` (`Revisions::CARRY_OPEN`, `CARRY_ALL` or `CARRY_NONE`; default open) |
+| `warpMarkupDeleteRevision` | Removes the latest revision, after a confirmation | `drawing` | — |
+| `warpMarkupUploadDrawings` | [Uploads a drawing set](#uploading-a-whole-drawing-set) | — | `files` (required, up to 100), `group`, `carry` |
+| `warpMarkupPinTypes` | Edits the [pin list](#pin-symbols-a-pin-list) (only with `pinTypes()`) | — | `types`: rows of `['id' => null, 'code' => 'E1', 'name' => 'Outlet']` |
+
+Good to know:
+
+- Test on your `MarkupPage`. `assertHasNoFormErrors()` after an action that has closed reads the page's own schema, so in a plain Livewire component (with `InteractsWithMarkup` and no form of its own) leave it out and check the database instead.
+- In a test, a `file` or `files` field takes `UploadedFile::fake()->image('plan.png', 800, 600)`. Use an image: a PDF has no pages until a browser opens it and counts them.
+- `shape.key` is 6 to 64 letters, digits, `-` or `_`. Use a new key, or the key of a shape already drawn on that page without a finding (it becomes the finding's shape). The coordinates are image pixels (or PDF points).
+- An action that the person may not use is hidden: `assertActionHidden('warpMarkupCreateFinding')` when `canEdit()` is false or the policy refuses `create`; the drawing and revision actions follow `canManageDrawings()`; `warpMarkupShareFindings` needs `shareLinks()`.
+- A finding or drawing that is gone (deleted, or of another team) is not an error: the edit and delete actions are hidden, and the other actions change nothing.
+- A refused status change in the edit form or in "Change together" saves nothing. The edit form shows your message as a notification (`assertNotified('…')`); "Change together" skips that finding and counts it.
+
+### A full example
+
+```php
+use App\Filament\Pages\Drawings;
+use App\Models\Defect;
+use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Livewire\Livewire;
+use Qalainau\FilamentWarpMarkup\Domain\Revisions;
+use Qalainau\FilamentWarpMarkup\Domain\ShapeRepository;
+use Qalainau\FilamentWarpMarkup\Enums\FindingStatus;
+use Qalainau\FilamentWarpMarkup\Models\MarkupDrawing;
+
+beforeEach(function () {
+    $this->actingAs(User::factory()->create());
+    Storage::fake('local');
+});
+
+it('uploads a drawing and adds a revision', function () {
+    Livewire::test(Drawings::class)
+        ->callAction('warpMarkupCreateDrawing', [
+            'file' => UploadedFile::fake()->image('1f.png', 800, 600),
+            'name' => '1F floor plan',
+        ])
+        ->assertHasNoFormErrors();
+
+    $drawing = MarkupDrawing::sole();
+
+    Livewire::test(Drawings::class)
+        ->callAction('warpMarkupCreateRevision', [
+            'file' => UploadedFile::fake()->image('1f-b.png', 800, 600),
+            'label' => 'B',
+            'carry' => Revisions::CARRY_OPEN,
+        ], arguments: ['drawing' => $drawing->id])
+        ->assertHasNoFormErrors();
+
+    expect($drawing->refresh()->currentRevision->label)->toBe('B');
+});
+
+it('creates, edits and deletes a finding', function () {
+    $path = UploadedFile::fake()->image('plan.png', 800, 600)->store('drawings', 'local');
+    $drawing = app(Revisions::class)->createDrawing(['name' => '1F plan'], 'local', $path, 'plan.png');
+    $sheet = $drawing->currentRevision->sheets()->first();
+
+    Livewire::test(Drawings::class)
+        ->mountAction('warpMarkupCreateFinding', [
+            'sheet' => $sheet->id,
+            'shape' => ['key' => 'pin0000001', 'type' => 'pin', 'geometry' => ['x' => 120, 'y' => 80]],
+        ])
+        ->fillForm(['title' => 'Crack above the window'])
+        ->callMountedAction()
+        ->assertHasNoFormErrors();
+
+    $defect = Defect::sole();
+    expect($defect->status)->toBe(FindingStatus::Open)->and($defect->getMarkupNumber())->toBe(1);
+
+    Livewire::test(Drawings::class)
+        ->mountAction('warpMarkupEditFinding', ['finding' => $defect->id])
+        ->fillForm(['title' => 'Crack above the left window'])
+        ->callMountedAction();
+
+    Livewire::test(Drawings::class)
+        ->mountAction('warpMarkupBulkEditFindings', ['findings' => [(string) $defect->id]])
+        ->fillForm(['status' => 'in_progress'])
+        ->callMountedAction();
+
+    expect($defect->refresh())->title->toBe('Crack above the left window')->status->toBe(FindingStatus::InProgress);
+
+    Livewire::test(Drawings::class)->callAction('warpMarkupDeleteFinding', arguments: ['finding' => $defect->id]);
+
+    expect(Defect::count())->toBe(0);
+});
+```
+
+To start with findings that are already on a drawing, create the record and place it: `app(ShapeRepository::class)->placeFinding($sheet, ['key' => 'pin0000002', 'type' => 'pin', 'geometry' => ['x' => 10, 'y' => 10]], $defect)` (see [Using it from code](#using-it-from-code)).
+
+### The other buttons (Livewire methods)
+
+Call them on the component: `Livewire::test(Drawings::class)->instance()->warpMarkupSetStatus($defect->id, 'fixed')`.
+
+- **`warpMarkupSetStatus($finding, string $status)`**: the status buttons. Returns `['finding' => […]]`, `['blocked' => 'your message', …]` when a [rule](#rules-for-status-changes) refuses it (nothing is saved), or `['gone' => true]`.
+- **`warpMarkupComment($finding, ?string $body)`**: a comment. Returns `['finding' => […]]`, `['error' => …]` for an empty comment, or `['gone' => true]`.
+- **`warpMarkupFindings($revisionId)`**: the findings list of a revision, `['findings' => [...]]`. Only findings with a shape on that revision are listed.
+- **`warpMarkupFinding($finding)`**: the details of one finding, `['finding' => […]]` or `['gone' => true]`.
 
 ## All options
 
