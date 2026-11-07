@@ -1311,9 +1311,14 @@ The interface comes in English, Japanese, German, French, Spanish, Italian, Braz
 - PHP 8.3+
 - Laravel 12 or 13
 - Filament 5
-- SQLite, MySQL 8, MariaDB 10.11+ or PostgreSQL
+- SQLite, MySQL 8.0+, MariaDB 10.11+ or PostgreSQL 14+
 
 The interface is in ten languages (see [Translations](#translations)). PDF rendering uses [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) and the PDF export [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT), both bundled and loaded only when needed.
+
+### Tested on
+
+Before each release, the full test suite runs on PHP 8.3, 8.4 and 8.5 × Laravel 12 and 13 × SQLite, MySQL, MariaDB and PostgreSQL, with each database at its newest and its oldest supported version: 42 combinations in all. A version is released only when every combination passes.
+[See the results for each release](https://github.com/qalainau-labs/filament-warp-markup-docs/tree/main/test-runs).
 
 ## Support
 
