@@ -4,6 +4,21 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.2.1] - 2026-11-07
+
+### Changed
+
+- README "Drawings of one record": `for()` alone keeps projects apart — a finding of another project is gone on the
+  page, also through `?finding=` or a direct call — so the example no longer adds a condition to `findings()`, and the
+  section explains what that condition is for (hiding findings within the project). It also shows how to register the
+  page and link to it from the resource's table and edit page.
+- README "Testing": a new part "Testing drawings of one record, locks and permissions" (a resource page tested with its
+  record, drawings made with `'owner' => $project`, `statusLock` and `canDelete`, `assertActionHidden()` for Delete),
+  `warpMarkupDrawings()` in the list of Livewire methods, and every key `warpMarkupFinding()` returns (`canEdit`,
+  `canDelete`, `canComment`, `statusLock` and the rest).
+- Laravel Boost guidelines and skill: the same points (`for()` needs no `findings()` condition; `statusLock`,
+  `canDelete` and `warpMarkupDrawings()` in tests).
+
 ## [1.2.0] - 2026-11-06
 
 ### Added

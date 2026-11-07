@@ -186,7 +186,7 @@ That is all. Open the page, choose **Drawings → Upload a drawing**, pick a PDF
 
 ### Drawings of one record (a project, a building, a product)
 
-Most apps keep drawings per project. Put the workspace on a resource page and pass the record to `for()`: only that record's drawings are listed, new drawings belong to it, and `findingDefaults()` fills the project of new findings:
+Most apps keep drawings per project. Put the workspace on a resource page and pass the record to `for()`: only that record's drawings are listed and can be opened, new drawings belong to it, and `findingDefaults()` fills the project of new findings:
 
 ```php
 use Filament\Resources\Pages\Concerns\InteractsWithRecord;
@@ -214,14 +214,40 @@ class ProjectDrawings extends Page implements HasMarkupWorkspace
     {
         return $markup
             ->for($this->record)
-            ->findings(Defect::class, fn (Builder $query) => $query->whereBelongsTo($this->record))
+            ->findings(Defect::class)
             ->findingDefaults(['project_id' => $this->record->getKey()])
             ->findingSchema([/* ... */]);
     }
 }
 ```
 
-Register it in the resource: `'drawings' => Pages\ProjectDrawings::route('/{record}/drawings')`. To list a project's drawings yourself, add `morphMany(MarkupDrawing::class, 'owner')` to the project model.
+`for()` is all it takes to keep projects apart. A finding is shown, opened and changed only on a drawing the page can open, so a finding of another project is treated as gone on this page — also when someone puts its key into the address (`?finding=12`) or calls the page's methods directly. You do not need a condition in `findings()` for that; use its second argument only to hide findings within the project (for example cancelled ones, see [Findings](#findings)).
+
+Register the page in the resource and link to it from the table and the edit page:
+
+```php
+// ProjectResource
+public static function getPages(): array
+{
+    return [
+        // ...
+        'drawings' => Pages\ProjectDrawings::route('/{record}/drawings'),
+    ];
+}
+```
+
+```php
+use Filament\Actions\Action;
+use Filament\Support\Icons\Heroicon;
+
+// in the table: ->recordActions([...]); on the edit page: getHeaderActions()
+Action::make('drawings')
+    ->label('Drawings')
+    ->icon(Heroicon::OutlinedMap)
+    ->url(fn (Project $record): string => ProjectResource::getUrl('drawings', ['record' => $record])),
+```
+
+On the edit page, the record is `$this->record`: `->url(fn (): string => ProjectResource::getUrl('drawings', ['record' => $this->record]))`. To list a project's drawings yourself, add `morphMany(MarkupDrawing::class, 'owner')` to the project model.
 
 `InteractsWithMarkup` works in any Livewire component that implements `HasMarkupWorkspace`, `HasActions` and `HasSchemas` (a page, a widget, a custom component). Render it with `{{ $this->getWarpMarkup() }}`.
 
@@ -261,10 +287,10 @@ $markup
 `findings()` takes a second argument to limit which records are shown (and can be opened):
 
 ```php
-->findings(Defect::class, fn (Builder $query) => $query->where('project_id', $this->record->id))
+->findings(Defect::class, fn (Builder $query) => $query->where('status', '!=', 'cancelled'))
 ```
 
-Pins of findings outside the query are hidden.
+Pins of findings outside the query are hidden. To keep the findings of different projects apart, you do not need this: use `for()` ([Drawings of one record](#drawings-of-one-record-a-project-a-building-a-product)), which only opens that project's drawings and the findings on them.
 
 On the model, `HasMarkup` adds `markupShape` (the current position), `markupShapes` (the positions on every revision), `markupActivities` (comments and history) and `getMarkupNumber()`:
 
@@ -1031,6 +1057,7 @@ Good to know:
 - An action that the person may not use is hidden: `assertActionHidden('warpMarkupCreateFinding')` when `canEdit()` is false or the policy refuses `create`; the drawing and revision actions follow `canManageDrawings()`; `warpMarkupShareFindings` needs `shareLinks()`.
 - A finding or drawing that is gone (deleted, or of another team) is not an error: the edit and delete actions are hidden, and the other actions change nothing.
 - A refused status change in the edit form or in "Change together" saves nothing. The edit form shows your message as a notification (`assertNotified('…')`); "Change together" skips that finding and counts it.
+- What a person may do with a finding is in `warpMarkupFinding()` (see [the Livewire methods](#the-other-buttons-livewire-methods)): `canEdit`, `canDelete` and `canComment` follow your policy, `statusLock` is the reason from `statusLocked()`. Check them instead of pressing the buttons; the example below does.
 
 ### A full example
 
@@ -1109,6 +1136,63 @@ it('creates, edits and deletes a finding', function () {
 
 To start with findings that are already on a drawing, create the record and place it: `app(ShapeRepository::class)->placeFinding($sheet, ['key' => 'pin0000002', 'type' => 'pin', 'geometry' => ['x' => 10, 'y' => 10]], $defect)` (see [Using it from code](#using-it-from-code)).
 
+### Testing drawings of one record, locks and permissions
+
+A resource page ([Drawings of one record](#drawings-of-one-record-a-project-a-building-a-product)) is tested with its record: `Livewire::test(ProjectDrawings::class, ['record' => $project->getKey()])`. Make the drawings of a project with `'owner' => $project`:
+
+```php
+use App\Filament\Resources\Projects\Pages\ProjectDrawings;
+use App\Models\Defect;
+use App\Models\Project;
+use App\Models\User;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Livewire\Livewire;
+use Qalainau\FilamentWarpMarkup\Domain\Revisions;
+use Qalainau\FilamentWarpMarkup\Domain\ShapeRepository;
+
+beforeEach(function () {
+    $this->actingAs(User::factory()->create(['is_manager' => false]));
+    Storage::fake('local');
+    [$this->harbor, $this->school] = Project::factory()->count(2)->create();
+});
+
+function placedDefect(Project $project, array $attributes = []): Defect
+{
+    $path = UploadedFile::fake()->image('plan.png', 800, 600)->store('drawings', 'local');
+    $drawing = app(Revisions::class)->createDrawing(['name' => "{$project->name} 1F", 'owner' => $project], 'local', $path, 'plan.png');
+    $defect = Defect::factory()->for($project)->create($attributes);
+    app(ShapeRepository::class)->placeFinding($drawing->currentRevision->sheets()->first(), ['key' => Str::random(20), 'type' => 'pin', 'geometry' => ['x' => 10, 'y' => 10]], $defect);
+
+    return $defect;
+}
+
+it('keeps the drawings and findings of each project apart', function () {
+    $defect = placedDefect($this->school);
+    $page = Livewire::test(ProjectDrawings::class, ['record' => $this->harbor->getKey()])->instance();
+
+    expect($page->warpMarkupDrawings())->toBe([])   // the school's drawing is not listed
+        ->and($page->warpMarkupFinding($defect->id))->toBe(['gone' => true])
+        ->and($page->warpMarkupSetStatus($defect->id, 'fixed'))->toBe(['gone' => true]);
+});
+
+it('locks the status while waiting for the client, and only managers delete', function () {
+    // The page has ->statusLocked(fn (Defect $defect): ?string => $defect->awaiting_inspection ? 'Waiting for the client inspection' : null),
+    // and DefectPolicy::delete() returns $user->is_manager.
+    $defect = placedDefect($this->harbor, ['awaiting_inspection' => true]);
+    $page = Livewire::test(ProjectDrawings::class, ['record' => $this->harbor->getKey()]);
+
+    expect($page->instance()->warpMarkupFinding($defect->id)['finding'])
+        ->statusLock->toBe('Waiting for the client inspection')
+        ->canEdit->toBeTrue()
+        ->canDelete->toBeFalse()
+        ->and($page->instance()->warpMarkupSetStatus($defect->id, 'fixed')['blocked'])->toBe('Waiting for the client inspection');
+
+    $page->assertActionHidden('warpMarkupDeleteFinding', ['finding' => $defect->id]);
+});
+```
+
 ### The other buttons (Livewire methods)
 
 Call them on the component: `Livewire::test(Drawings::class)->instance()->warpMarkupSetStatus($defect->id, 'fixed')`.
@@ -1116,7 +1200,20 @@ Call them on the component: `Livewire::test(Drawings::class)->instance()->warpMa
 - **`warpMarkupSetStatus($finding, string $status)`**: the status buttons. Returns `['finding' => […]]`, `['blocked' => 'your message', …]` when a [rule](#rules-for-status-changes) refuses it (nothing is saved), or `['gone' => true]`.
 - **`warpMarkupComment($finding, ?string $body)`**: a comment. Returns `['finding' => […]]`, `['error' => …]` for an empty comment, or `['gone' => true]`.
 - **`warpMarkupFindings($revisionId)`**: the findings list of a revision, `['findings' => [...]]`. Only findings with a shape on that revision are listed.
-- **`warpMarkupFinding($finding)`**: the details of one finding, `['finding' => […]]` or `['gone' => true]`.
+- **`warpMarkupFinding($finding)`**: the details of one finding, `['finding' => […]]` or `['gone' => true]` (deleted, outside `findings()`, on a drawing this page cannot open, or of another team). The finding has:
+
+  | Key | |
+  | --- | --- |
+  | `key`, `number`, `code`, `title` | Its key (a string), the number and [pin symbol](#pin-symbols-a-pin-list) on the pin, the title |
+  | `status`, `resolved` | The status value (`'open'` …) and whether it is a resolved status |
+  | `assignee`, `due`, `dueLabel`, `overdue` | `['id' => …, 'name' => …]` or `null`; the due date as `Y-m-d`, as shown, and whether it is past |
+  | `sheet`, `shape`, `zone` | The page (`MarkupSheet` ID) and shape key of its current position, the [area](#areas-rooms) it is in |
+  | `fields` | The rows of `findingDetails()`: `[['label' => …, 'value' => …]]` |
+  | `canEdit`, `canDelete`, `canComment` | What the person may do: `canEdit()` and your policy's `update`, `delete` and `view` |
+  | `statusLock` | The reason from `statusLocked()`, or `null`. While it is set the status buttons are disabled and every status change is refused with it |
+  | `activities` | The timeline: comments (with `photos`), status and assignee changes, carry-overs |
+
+- **`warpMarkupDrawings()`**: the drawings this page can open, `[['id' => …, 'name' => …, 'group' => …, 'revision' => …]]` — after `for()`, `drawings()` and the panel's tenant. Use it to check that the drawings of another record (or team) are not listed.
 
 ## Browser tests (JavaScript)
 
