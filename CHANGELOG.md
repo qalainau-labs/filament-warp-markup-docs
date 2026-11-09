@@ -4,6 +4,52 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-11-10
+
+### Fixed
+
+- Summary: the weekly chart had "up to 7" between the first and the last date. The largest week and 0 are now a scale
+  on the left, on a dotted top line and the bottom line. The translation key `summary.max` is gone.
+- Summary: the lines are named for what they count ("Not yet resolved at week end", "Found that week", "Resolved that
+  week") instead of "Open", which is also a status, and the new findings are a blue dashed line instead of red next to
+  the orange one.
+- On a phone (40rem wide or less) the workspace without `height()` is at least 85% of the screen high, so the drawing
+  keeps about 430px under the wrapped top bar instead of about 200px. The bar of a drawing tool or a selected markup is
+  one row at the top of the drawing that scrolls sideways, instead of wrapping over the whole drawing. This row and the
+  tool row show a shadow at the end where more is hidden. The page menu uses a row of its own, so the page name is not
+  cut.
+- Summary: the assignee names are plain text instead of orange links. Each row has "Show in list" (also Unassigned),
+  and a person has "Make a link to their findings…" (it opens the window that makes the link) with a link icon instead of "Portal" with a share icon. The
+  Unassigned row says "No one to send a link to". On a phone the buttons are on a row under the numbers, so the table is
+  not cut on the right, and the close button stays next to the title.
+- Summary: the dates of the weekly chart are written the way the language does ("Nov 9, 2026", "2026年11月9日",
+  "9. Nov 2026") instead of "11/9/2026".
+- On a phone, every tool has a short name under its icon (tooltips do not show on touch screens), and Compare, Export
+  and Drawings in the top bar show their names. Text hidden on a phone stays the name of its button for screen readers.
+  New translation keys: `tools.short.*`, `summary.show`, `share.no_portal`.
+- Japanese: a revision is "B 版" instead of "第 B 版", and the chart is "直近 12 週".
+- Summary: the cards say which statuses they count ("Open + In progress", "Fixed + Verified"), the number columns of
+  the tables line up, the title and the close button stay at the top while the window scrolls, and the legend sample of
+  "Found that week" is dashed like its line.
+- Tools: two columns, left to right and top to bottom, with Undo and Redo side by side in the last row, and a little
+  shorter buttons. The tools used to fill as many columns as the height allowed, so they moved between columns with
+  the screen height and the language, and Redo stood alone at the top of a third column. The column scrolls when it
+  does not fit. The shadow at the end of the phone tool row is lighter.
+- Findings panel: the filters and the list scroll as one, so the first findings show right under the filters, and
+  "Add a finding" stays at the bottom instead of being cut in half. The note about findings on other revisions is under
+  the list, two lines until you click it.
+- Without `height()`, the workspace on a wide screen is at least 640px high instead of 480px (it still fills the screen
+  below it when there is more room), so the findings panel shows findings under the filters.
+- The page menu is up to 20rem wide instead of 14rem, so "1 / 2 · A-101 · 1F floor plan" is not cut on a wide screen.
+
+### Added
+
+- Findings: above the list, the number of findings of this drawing that are only on another revision ("Not in this
+  list: 2 findings that are only on Rev. A …"), and a tooltip on the tab ("Findings pinned on this revision of the
+  drawing"). This explains why a list of all findings of a record shows more than the tab: a new revision usually
+  takes over only the open findings. `warpMarkupFindings()` also returns `elsewhere` (`count`, `revisions`), from the
+  new `Markup::findingsOnOtherRevisions()`. New translation keys `findings.count_help` and `findings.other_revisions`.
+
 ## [1.2.1] - 2026-11-07
 
 ### Changed

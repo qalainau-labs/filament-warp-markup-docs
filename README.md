@@ -396,6 +396,8 @@ The first time a PDF is opened, the browser counts its pages and their sizes and
 
 Shapes go to the page with the same number and are scaled when the page size changed. Areas and links describe the drawing rather than one revision, so they move with the open findings too. Findings keep their history (“carried over to revision B”), and the old revision still shows them where they were. **Remove the latest revision** undoes a mistaken upload. Anyone can still open older revisions from the revision menu; people who have one open see a “revision C was uploaded — open it” banner.
 
+Because a new revision usually takes over only the open findings, the fixed ones stay pinned on the older revision. So a list of all findings of a record can show more than the **Findings** tab of the current revision. The tab explains the difference: above the list it says how many findings of this drawing are only on another revision and which ("Not in this list: 2 findings that are only on Rev. A"). Only findings the user can see are counted. From PHP, `$this->getWarpMarkup()->findingsOnOtherRevisions($revision)` on the page (the `Markup` configured in `markup()`) returns the same, for example `['count' => 2, 'revisions' => ['Rev. A']]`.
+
 **Compare** shows another revision on top of the current page: *Overlay* draws the older one in red and the current one in blue, so unchanged lines are black, removed lines red and added lines blue. *Slide to compare* shows the older revision left of a line and the current one right of it; drag the slider to move the line.
 
 - **Align.** Scanned drawings are rarely in the same place on the page. Press **Align**, click a landmark on the older revision (red), then the same point on this revision (blue), and once more for a second point far away. The older revision is moved, turned and scaled to match (for this page and this pair of revisions, until you reload). **Reset** puts it back.
@@ -730,7 +732,7 @@ Count by your own fields too:
 ->summaryGroups(['category' => 'Category', 'trade' => 'Trade'])
 ```
 
-Enums show their label. An assignee's name opens the list of findings filtered to that person, and **Portal** next to it makes a [portal link](#portal-links-for-subcontractors) for them. The summary counts the findings on the current revision of each drawing that the user can see — the same findings as the list. Turn it off with `->summary(false)`.
+Enums show their label. Next to each assignee, **Show in list** opens the list of findings filtered to that person (also for Unassigned), and **Make a link to their findings…** makes a [portal link](#portal-links-for-subcontractors) for them. The Unassigned row has no link, as there is no one to send it to. The dates of the weekly chart follow the app's locale. The summary counts the findings on the current revision of each drawing that the user can see — the same findings as the list. Turn it off with `->summary(false)`.
 
 ## Sign-off at handover
 
@@ -763,7 +765,7 @@ Whoever opens the link sees just those findings, on a page that works on a phone
 
 A share link shows the findings you selected. A **portal** shows everything assigned to one person or company — and keeps up: findings assigned to them later appear on the same link, findings given to someone else disappear from it. Send one link to each subcontractor at the start of the job.
 
-It needs `assignee()` (the assignee can be a user, a company or any model). Make one with **Share link → Everything assigned to one person or company**, or from the [summary](#summary) with **Portal** next to their name. The page first shows the findings still to do; **All** shows the resolved ones too.
+It needs `assignee()` (the assignee can be a user, a company or any model). Make one with **Share link → Everything assigned to one person or company**, or from the [summary](#summary) with **Make a link to their findings…** next to their name. The page first shows the findings still to do; **All** shows the resolved ones too.
 
 The list is updated when findings are created, edited or changed together in the workspace. When you assign findings elsewhere (a Filament resource, an import), call:
 
@@ -1299,7 +1301,7 @@ test('a finding is placed on the drawing', async ({ page }) => {
 | `report(bool, ?string $title, ?bool $browsershot)` | on | The findings report |
 | `modifyBrowsershotUsing(Closure)` | — | Configure Browsershot |
 | `notifications(bool)` / `findingUrl(Closure)` | off | Database notifications to the assignee |
-| `height(string)` | fills the window | Height of the workspace |
+| `height(string)` | fills the window below it (at least 640px on a wide screen, 85% of a phone screen) | Height of the workspace |
 | `poll(int $seconds)` | `20` | How often to look for other people's changes |
 
 ## Translations
