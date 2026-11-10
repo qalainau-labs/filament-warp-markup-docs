@@ -4,6 +4,12 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-11-10
+
+### Security
+
+- `MarkupField` / `MarkupEntry`: image stamps are dropped from the field's shapes when saving and showing, so a record can no longer make people who open it load an image from an outside URL. The field has no image stamp tool, so nothing drawn with it is lost.
+
 ## [1.3.0] - 2026-11-10
 
 ### Fixed
