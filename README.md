@@ -1312,7 +1312,7 @@ The interface comes in English, Japanese, German, French, Spanish, Italian, Braz
 
 - PHP 8.3+
 - Laravel 12 or 13
-- Filament 5
+- Filament 5.8.3 or later
 - SQLite, MySQL 8.0+, MariaDB 10.11+ or PostgreSQL 14+
 
 The interface is in ten languages (see [Translations](#translations)). PDF rendering uses [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) and the PDF export [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT), both bundled and loaded only when needed.

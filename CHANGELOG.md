@@ -2,7 +2,11 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
-## [Unreleased]
+## [1.3.2] - 2026-11-12
+
+### Changed
+
+- Now requires Filament 5.8.3 or later (was 5.0). Older 5.x versions have known security advisories (Composer 2.9 and later refuses to install them), and the plugin cannot be tested on them. The tests now also run on the lowest supported versions before each release.
 
 ## [1.3.1] - 2026-11-10
 
