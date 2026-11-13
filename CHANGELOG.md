@@ -2,6 +2,20 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [Unreleased]
+
+## [1.4.0] - 2026-11-13
+
+### Added
+
+- `MarkupField::imageFrom('photos')`: draw on the first image of a `FileUpload` in the same form — also on a photo that was just uploaded and is not saved yet. While there is no photo, the field says *Add a photo first. Then you can draw on it here.* instead of showing an error.
+- `MarkupField::embed()`: the field's HTML for a screen that is not a Livewire form. Warp Offline uses it to show the field in its offline form, so arrows and pins can be drawn on a photo without a signal.
+- `MarkupImage`: draws what was drawn with `MarkupField` into the photo on the server (PHP's GD), for prints, emails and thumbnails. `MarkupImage::render($photo, $shapes)` returns the picture (JPEG, PNG or WebP), `dataUri()` a `data:image/...` URI for Warp Print's `Field::image()` or an email, and `fromDisk()` reads the photo from a disk. Options: `maxWidth` (make a large photo smaller first; the marks stay on the same spot), `notes` (list the pin notes under the picture), `font`, `format`, `quality` and `maxPixels`. Phone photos are turned by their EXIF orientation first, as the browser shows them. GD is suggested, not required. A Latin font (Liberation Sans Bold, SIL Open Font License 1.1) is bundled for the text.
+
+### Fixed
+
+- `MarkupField`: the pin tool of the field was named "Finding — click where the problem is", the name of the drawing workspace's tool. A form field has no findings, so it is now "Pin — click the image to add a numbered note" (new translation key `field.pin_tool`, in all 10 languages).
+
 ## [1.3.2] - 2026-11-12
 
 ### Changed

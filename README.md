@@ -845,7 +845,98 @@ protected function casts(): array
 
 Shapes are checked on the server before they are saved; unknown types and broken coordinates are dropped. The image can be PNG, JPEG, WebP or SVG.
 
+### Drawing on a photo of the same form
+
+A site photo with an arrow at the crack: let people draw on the picture they have just uploaded, without saving first. `imageFrom()` names a `FileUpload` of the same form, and the field draws on its first image:
+
+```php
+use Filament\Forms\Components\FileUpload;
+
+FileUpload::make('photos')->image()->multiple()->directory('inspections'),
+
+MarkupField::make('photo_marks')->imageFrom('photos')->tools(['arrow', 'ellipse', 'pin']),
+```
+
+- While the upload field is empty, the drawing field says *Add a photo first. Then you can draw on it here.* and shows no tools.
+- When a photo is uploaded, replaced or removed, the field follows. Marks that were already drawn stay where they were on the picture (the coordinates are pixels of the image).
+- The upload field can be anywhere in the same form — in another section or tab too.
+- The photo is read from the upload field's disk; with `visibility('private')` a temporary URL is used. A file that the browser cannot show as an image (a PDF) gives no picture.
+- `imageFrom()` wins over `image()`. To show the marks later, give `MarkupEntry` the same picture: `MarkupEntry::make('photo_marks')->image(fn ($record) => Storage::url($record->photos[0]))`.
+
+### Offline, with Warp Offline
+
+With [Warp Offline](https://warpui.com/offline) installed, the same field works in its offline form — on a photo taken without a signal too. A field with `imageFrom()` or a fixed `image('…')` URL can be drawn on offline; one whose picture is decided for each record by a closure is read-only there. Nothing has to be configured.
+
+### In a screen that is not a Livewire form
+
+`embed()` returns the field's HTML for an Alpine screen that keeps the form's values itself (this is how Warp Offline shows the field). Every argument is a JavaScript expression:
+
+```php
+{!! $field->embed(state: 'form.state.damage', image: 'photoUrl(form)', readOnly: 'form.locked') !!}
+```
+
+`state` is read and written (an array of shapes); `image` and `readOnly` are read once when the field starts, so re-create the element when they change. The button that edits a pin list is left out. **Run what comes back through `MarkupField::cleanShapes()` before saving it** — in a Livewire form the field does that itself.
+
 With `pinTypes()`, a pin can show a symbol from a [pin list](#pin-symbols-a-pin-list) instead of its number; the name of the row fills the note, and you can write over it. `canManagePinTypes()` works here too (default: whenever the field is not disabled). The symbol is saved in the shape (`data.code`), so `MarkupEntry` shows it without the list.
+
+### Getting a picture with the marks (for prints, emails, thumbnails)
+
+The field draws its marks in the browser, on top of the photo; the photo file itself is not changed. When you need one picture with the marks in it — a service report printed with [Warp Print](https://warpui.com/print), an email to the customer, a thumbnail in a table — `MarkupImage` draws the saved shapes into the photo on the server, with PHP's GD:
+
+```php
+use Qalainau\FilamentWarpMarkup\MarkupImage;
+
+// The photo's bytes and the field's value → the picture's bytes (JPEG by default)
+$jpeg = MarkupImage::render(Storage::disk('public')->get($check->photo), $check->damage);
+
+// The same, read from a disk
+$jpeg = MarkupImage::fromDisk('public', $check->photo, $check->damage);
+
+// As a data URI, for an <img src="…"> in an email or Warp Print's Field::image()
+$src = MarkupImage::dataUri(Storage::disk('public')->get($check->photo), $check->damage, ['maxWidth' => 1600]);
+```
+
+In a [Warp Print](https://warpui.com/print) source, give `Field::image()` the data URI as its state:
+
+```php
+use Qalainau\FilamentWarpPrint\Sources\Field;
+
+Field::image('damage_photo')
+    ->label('Photo with the damage marked')
+    ->state(fn (VehicleCheck $record): ?string => $record->photo
+        ? MarkupImage::dataUri(Storage::disk('public')->get($record->photo), $record->damage, ['maxWidth' => 1600])
+        : null),
+```
+
+| Method | Returns |
+| --- | --- |
+| `MarkupImage::render(string $contents, mixed $shapes, array $options = [])` | The picture's bytes. `$contents` is the photo (PNG, JPEG, WebP or GIF); `$shapes` is what `MarkupField` saved (an array, or `null`). |
+| `MarkupImage::dataUri(string $contents, mixed $shapes, array $options = [])` | The same picture as `data:image/jpeg;base64,…` (or `png`, `webp`). |
+| `MarkupImage::fromDisk(string $disk, string $path, mixed $shapes, array $options = [])` | `render()` for a file on a Laravel disk. |
+| `MarkupImage::defaultFont(?string $path)` | Sets the font for the whole app (see "Text in other languages" below). `null` goes back to the bundled font. |
+
+| Option | Default | What it does |
+| --- | --- | --- |
+| `format` | `'jpeg'` | `'jpeg'`, `'png'` or `'webp'` (WebP needs GD built with WebP). A transparent PNG is put on white for JPEG. |
+| `quality` | `85` | JPEG and WebP quality, 0–100. |
+| `maxWidth` | `null` | Makes a wider photo this many pixels wide before drawing. The marks stay on the same spot, and lines and text get thinner and smaller with the photo. A narrower photo is left as it is. Use it for prints (1600 is plenty for A4) and thumbnails. |
+| `notes` | `false` | Also lists the pin notes under the picture, as the field does under the image: the pin's number (or symbol) in a circle and its note. Pins without a note are left out. |
+| `font` | bundled Liberation Sans Bold | A `.ttf` or `.otf` file for the text, stamps, pin numbers and notes. |
+| `maxPixels` | `40000000` | A larger photo (width × height) is refused before it is read. |
+
+What it draws:
+
+- Every shape the field can draw: pins (with their number, or the pin list symbol in `data.code`), rectangles, ellipses, clouds, arrows, lines, connected lines, pen strokes, highlights, text (with its background), stamps, dimensions, areas, rooms (zones, with their name), links and counts — with their colour, line width, fill and opacity, the same size as in the field. Pins are drawn on top, as on screen.
+- Line widths and text sizes follow the photo's size, as in the field (× the longest side ÷ 1000). A pin is as big as on screen when the photo is shown 1000 pixels wide.
+- The shapes go through `MarkupField::cleanShapes()` first, so a value with broken coordinates or unknown types does not stop the picture; those shapes are skipped. Image stamps are never drawn (the field drops them, see 1.3.1).
+- Dimensions and areas are drawn without a number: the form field has no scale.
+
+Things to know:
+
+- **GD is required** (`ext-gd`; most PHP builds have it). Without it, and for files GD cannot read (SVG, PDF), `Qalainau\FilamentWarpMarkup\Exceptions\MarkupImageException` is thrown with a sentence that says what is wrong. An SVG drawing in the field cannot be turned into a picture this way.
+- **Phone photos.** Phones often save a photo sideways with an EXIF "orientation" tag, and the browser turns it when showing it — so the marks' coordinates are for the turned photo. GD does not read the tag, so `MarkupImage` turns JPEG photos itself before drawing. This needs PHP's `exif` extension; without it the photo is not turned, and the marks of a sideways photo land in the wrong place. Check `function_exists('exif_read_data')` on your server if you take photos with phones.
+- **Memory.** Drawing needs about 10 bytes per pixel of the photo (a 4000 × 3000 phone photo: about 130 MB). A photo over `maxPixels`, or one that would go over PHP's `memory_limit`, is refused with an exception instead of stopping PHP. It takes about 0.2 seconds for a 12-megapixel photo; cache the result (for example, keyed by a hash of the photo's path and the shapes) when the same picture is shown often.
+- **Text in other languages.** The bundled font (Liberation Sans Bold, SIL Open Font License 1.1, in `resources/fonts` with its license) has Latin, Greek and Cyrillic letters only. For Japanese, Chinese or Korean notes and text, pass a font that has them — for example Noto Sans JP — with the `font` option, or once for the whole app in a service provider: `MarkupImage::defaultFont(resource_path('fonts/NotoSansJP-Bold.ttf'))`.
 
 ## Who can do what
 
@@ -1314,6 +1405,7 @@ The interface comes in English, Japanese, German, French, Spanish, Italian, Braz
 - Laravel 12 or 13
 - Filament 5.8.3 or later
 - SQLite, MySQL 8.0+, MariaDB 10.11+ or PostgreSQL 14+
+- Optional: PHP's GD extension (and `exif` for phone photos) for [`MarkupImage`](#getting-a-picture-with-the-marks-for-prints-emails-thumbnails)
 
 The interface is in ten languages (see [Translations](#translations)). PDF rendering uses [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0) and the PDF export [pdf-lib](https://github.com/Hopding/pdf-lib) (MIT), both bundled and loaded only when needed.
 
