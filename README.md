@@ -947,6 +947,41 @@ Things to know:
 
 If the findings model has a policy, `create`, `update`, `delete` and `view` are respected: the Finding tool, the status buttons, Edit, Delete and the comment box follow them.
 
+### Restricting pages per role
+
+When your app has roles — some people may not open the drawings at all, others may only look — decide it on the page you made from `MarkupPage`. Markup has no plugin class, so you override two static methods on your page:
+
+```php
+use App\Models\User;
+use Qalainau\FilamentWarpMarkup\Pages\MarkupPage;
+
+class Drawings extends MarkupPage
+{
+    // Who may open the page (menu item, URL and every Livewire call)
+    public static function canAccess(): bool
+    {
+        $user = auth()->user();
+
+        return parent::canAccess() && $user instanceof User && $user->canOpen(static::class);
+    }
+
+    // false = view only: the drawings, findings, comments and reports can be read, nothing can be changed
+    public static function canWrite(): bool
+    {
+        $user = auth()->user();
+
+        return $user instanceof User && ! $user->isReadOnlyOn(static::class);
+    }
+}
+```
+
+- **`canAccess()` false:** the page is left out of the navigation, its URL answers 403, and Filament checks it again on every Livewire request, so a page that was already open stops working too.
+- **`canWrite()` false (view only):** the page opens, but these are hidden and refused (403 when called directly): drawing and saving shapes, renaming a sheet and setting its scale, creating, editing, deleting and bulk-editing findings, changing a status, comments and photo markup, sign-off (the past sign-offs stay visible), uploading, renaming and deleting drawings and revisions, the pin list, share links (creating, listing and revoking), starting, recording, completing and deleting checklist inspections, and the AI suggestions.
+- **Still allowed when view only:** opening drawings, revisions and pages, the findings list and details, the summary, the findings report (PDF or print page), CSV and BCF export, the inspection CSV, the list of sign-offs, and the share-link page itself for the people it was sent to.
+- **It only narrows.** `canWrite()` is combined with `canEdit()`, `canManageDrawings()`, `comments()`, `canManagePinTypes()` and your policy with "and": returning `true` never lets someone do what those rules refuse.
+- Return `false` for people who are not signed in, as the example does.
+- A page that uses the `InteractsWithMarkup` trait directly (for example a resource page) keeps its own rules; add `use Qalainau\FilamentWarpMarkup\Access\ChecksPageAccess;` to it and override `canWrite()` the same way to make it view only.
+
 ## Multi-tenancy
 
 Building a SaaS where each customer (a team, a company, a site office) must only see its own drawings? Warp Markup follows Filament's [tenancy](https://filamentphp.com/docs/5.x/users/tenancy). On a panel with `->tenant(...)`, every team gets its own drawings and findings, and nothing else is needed in the workspace.

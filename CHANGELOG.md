@@ -2,7 +2,11 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
-## [Unreleased]
+## [1.5.0] - 2026-11-15
+
+### Added
+
+- A page made from `MarkupPage` can be made view only per role by overriding `canWrite()`: every way to draw, edit findings, comment, sign off or manage drawings is hidden and refused, combined with `canEdit()` and the other rules with "and". See "Restricting pages per role" in the README.
 
 ## [1.4.0] - 2026-11-13
 
