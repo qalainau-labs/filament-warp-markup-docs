@@ -2,6 +2,12 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.6.1] - 2026-11-20
+
+### Fixed
+
+- **Console error `warpMarkup is not defined`**: on pages where Livewire re-renders a Markup drawing page inside another Alpine component, the browser console could show `warpMarkup is not defined` before the component's script had arrived. Empty components are now registered up front, and the real ones replace them as soon as they load. No visible change.
+
 ## [1.6.0] - 2026-11-19
 
 ### Added
