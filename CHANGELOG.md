@@ -2,6 +2,17 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.6.0] - 2026-11-19
+
+### Added
+
+- `MarkupImage` draws each letter with the first font that has it: the main font, then the bundled font, then fallback fonts. Without any setting it finds CJK fonts installed on the server (for example Noto Sans CJK from `apt install fonts-noto-cjk`, the same package the server PDFs of the findings report use), so Japanese, Chinese and Korean notes, text and stamps are drawn — also mixed in one note. Set the fallback fonts yourself with `MarkupImage::fallbackFonts([...])` or the `fallbackFonts` option (`[]` for none).
+
+### Fixed
+
+- `MarkupImage` drew Japanese, Chinese and Korean letters as boxes without saying anything. A letter that no font has, a font PHP's GD cannot read (such as Hiragino Sans on macOS) and a variable font (drawn Thin) now each write a warning to the Laravel log that says how to fix it.
+- README: `.ttc` font collections can be used (their first font); the markups in the marked-up PDF are a picture over each page, so their text cannot be searched.
+
 ## [1.5.0] - 2026-11-15
 
 ### Added

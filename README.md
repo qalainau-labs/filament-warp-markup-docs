@@ -690,7 +690,7 @@ Return `null` for anything the model is not sure about, and throw a `RuntimeExce
 **Export** offers:
 
 - **Findings report** — a cover with counts per status, each page that has findings with the numbered pins drawn on it, and a table of the findings: a crop of the drawing around each one, title, details, the latest comments, status, assignee, due date and photos. It respects the status filter of the panel.
-- **Marked-up PDF** — your original PDF with the markups drawn on top of every page (the drawing itself stays vector). Image drawings become a PDF page.
+- **Marked-up PDF** — your original PDF with the markups drawn on top of every page. The drawing itself stays vector (its text can still be searched); the markups are added as a picture over each page, so their text (notes, stamps) cannot be searched or copied in the PDF. Image drawings become a PDF page.
 - **This page as an image** — a PNG of the page with its markups.
 - **Findings (CSV)** — one row per finding: number, title, status, assignee, due date, page, area, the rows of `findingDetails()`, the number of comments, dates and a link to the finding. UTF-8 with a BOM, so Excel opens it with the right characters; values that look like formulas are escaped.
 - **Findings (BCF)** — a BCF 2.1 file (`.bcfzip`) with one topic per finding (title, status, assignee, due date, details and comments) for BIM tools such as Revit, Archicad, Solibri or BIMcollab. Topics keep the same GUID when you export again. Needs the PHP `zip` extension.
@@ -714,7 +714,7 @@ composer require spatie/browsershot
 ->report(false)                // no report
 ```
 
-If Chrome fails, the person gets a link to the printable page instead of an error. For Japanese, Chinese or Korean text in server PDFs, install a CJK font on the server (for example `fonts-noto-cjk`).
+If Chrome fails, the person gets a link to the printable page instead of an error. For Japanese, Chinese or Korean text in server PDFs, install a CJK font on the server (for example `apt install fonts-noto-cjk`). `MarkupImage` (pictures with the marks drawn in) finds and uses the same font, so one install covers both.
 
 The report page is opened through a signed link that expires after an hour; its contents are prepared with the permissions of the person who asked for it.
 
@@ -913,7 +913,8 @@ Field::image('damage_photo')
 | `MarkupImage::render(string $contents, mixed $shapes, array $options = [])` | The picture's bytes. `$contents` is the photo (PNG, JPEG, WebP or GIF); `$shapes` is what `MarkupField` saved (an array, or `null`). |
 | `MarkupImage::dataUri(string $contents, mixed $shapes, array $options = [])` | The same picture as `data:image/jpeg;base64,…` (or `png`, `webp`). |
 | `MarkupImage::fromDisk(string $disk, string $path, mixed $shapes, array $options = [])` | `render()` for a file on a Laravel disk. |
-| `MarkupImage::defaultFont(?string $path)` | Sets the font for the whole app (see "Text in other languages" below). `null` goes back to the bundled font. |
+| `MarkupImage::defaultFont(?string $path)` | Sets the main font for the whole app (see "Text in other languages" below). `null` goes back to the bundled font. |
+| `MarkupImage::fallbackFonts(?array $paths)` | Sets the fonts for the letters the main font does not have, for the whole app. `null` (the default) finds CJK fonts installed on the server; `[]` uses none. |
 
 | Option | Default | What it does |
 | --- | --- | --- |
@@ -921,7 +922,8 @@ Field::image('damage_photo')
 | `quality` | `85` | JPEG and WebP quality, 0–100. |
 | `maxWidth` | `null` | Makes a wider photo this many pixels wide before drawing. The marks stay on the same spot, and lines and text get thinner and smaller with the photo. A narrower photo is left as it is. Use it for prints (1600 is plenty for A4) and thumbnails. |
 | `notes` | `false` | Also lists the pin notes under the picture, as the field does under the image: the pin's number (or symbol) in a circle and its note. Pins without a note are left out. |
-| `font` | bundled Liberation Sans Bold | A `.ttf` or `.otf` file for the text, stamps, pin numbers and notes. |
+| `font` | bundled Liberation Sans Bold | The main `.ttf`, `.otf` or `.ttc` file for the text, stamps, pin numbers and notes. |
+| `fallbackFonts` | CJK fonts found on the server | Font files for the letters the main font does not have, tried in this order. `[]` uses none. |
 | `maxPixels` | `40000000` | A larger photo (width × height) is refused before it is read. |
 
 What it draws:
@@ -936,7 +938,22 @@ Things to know:
 - **GD is required** (`ext-gd`; most PHP builds have it). Without it, and for files GD cannot read (SVG, PDF), `Qalainau\FilamentWarpMarkup\Exceptions\MarkupImageException` is thrown with a sentence that says what is wrong. An SVG drawing in the field cannot be turned into a picture this way.
 - **Phone photos.** Phones often save a photo sideways with an EXIF "orientation" tag, and the browser turns it when showing it — so the marks' coordinates are for the turned photo. GD does not read the tag, so `MarkupImage` turns JPEG photos itself before drawing. This needs PHP's `exif` extension; without it the photo is not turned, and the marks of a sideways photo land in the wrong place. Check `function_exists('exif_read_data')` on your server if you take photos with phones.
 - **Memory.** Drawing needs about 10 bytes per pixel of the photo (a 4000 × 3000 phone photo: about 130 MB). A photo over `maxPixels`, or one that would go over PHP's `memory_limit`, is refused with an exception instead of stopping PHP. It takes about 0.2 seconds for a 12-megapixel photo; cache the result (for example, keyed by a hash of the photo's path and the shapes) when the same picture is shown often.
-- **Text in other languages.** The bundled font (Liberation Sans Bold, SIL Open Font License 1.1, in `resources/fonts` with its license) has Latin, Greek and Cyrillic letters only. For Japanese, Chinese or Korean notes and text, pass a font that has them — for example Noto Sans JP — with the `font` option, or once for the whole app in a service provider: `MarkupImage::defaultFont(resource_path('fonts/NotoSansJP-Bold.ttf'))`.
+- **Text in other languages.** Each letter is drawn with the first font that has it: the main font (`font`, or `MarkupImage::defaultFont()`), then the bundled font, then the fallback fonts. The bundled font (Liberation Sans Bold, SIL Open Font License 1.1, in `resources/fonts` with its license) has Latin, Greek and Cyrillic letters only. For Japanese, Chinese and Korean, install Noto Sans CJK on the server — it has all three — and nothing else is needed: `MarkupImage` finds it.
+
+  ```bash
+  sudo apt install fonts-noto-cjk        # Debian, Ubuntu (also: apk add font-noto-cjk, dnf install google-noto-sans-cjk-fonts)
+  ```
+
+  It looks in the usual places of Debian, Ubuntu, Alpine, Fedora, macOS and Windows. A font somewhere else, or one you ship with your app, is passed in a service provider:
+
+  ```php
+  MarkupImage::fallbackFonts([resource_path('fonts/NotoSansCJKjp-Bold.otf')]);
+  MarkupImage::defaultFont(resource_path('fonts/NotoSansJP-Bold.ttf')); // or make it the main font: its Latin letters are used too
+  ```
+
+  When a letter is in none of the fonts, it is drawn as a box and a warning is written to the Laravel log with the letters and how to fix it — check the log once after the first pictures with notes in a new language.
+
+  What PHP's GD can read: `.ttf` and `.otf` files, and `.ttc` collections, of which only the first font is used (Noto Sans CJK's first font is the Japanese one; it draws Chinese characters in their Japanese shapes — for Chinese, pass `NotoSansCJKsc-Bold.otf` or `NotoSansCJKtc-Bold.otf`). Fonts without a Windows Unicode character map, such as Hiragino Sans on macOS, cannot be read; they are skipped with a warning in the log. A variable font (for example `NotoSansJP[wght].ttf` from Google Fonts) is drawn at its default weight, which is often Thin; a warning says so. Use a static font such as the Bold one.
 
 ## Who can do what
 
