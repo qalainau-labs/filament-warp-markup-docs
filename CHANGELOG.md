@@ -2,6 +2,25 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.7.0] - 2026-11-23
+
+### Added
+
+- **Mark selected PDF text.** Three new tools, `text_highlight`, `strikeout` and `underline`, work like selecting text in a document: drag from one word to another on a PDF page and the words in between get a highlight, a line through them or a line under them. The selected words are saved with the mark. They work on PDF pages that have text (not on images or scanned PDFs). Add them with `tools([...])`; they are not in the default tool list.
+- **Callouts.** The `callout` tool draws a leader line from a point on the drawing to a box with text, like the callouts of CAD and PDF markup programs. Add it with `tools([...])`; it is not in the default tool list.
+- **Tool presets** with `toolPresets()`. People save the current tool with its color, line width, fill and text size (and the chosen stamp or pin symbol) under a name, and pick it again with one click from the **Presets** menu. You can also give everyone fixed presets: `toolPresets([['label' => 'Red cloud', 'tool' => 'cloud', 'style' => ['color' => '#dc2626', 'width' => 3]]])`. Personal presets are stored per person and per tenant in the new table `warp_markup_tool_presets` — run `php artisan migrate`. Until you do, only your fixed presets are shown.
+- **@mentions in comments** with `mentions(fn (string $search, Model $finding) => ...)`. Typing `@` in a comment suggests people; the mentioned people get a database notification and the `FindingMentioned` event is fired. People who cannot open the tenant, or whose policy does not allow viewing the finding, are never suggested or notified, and every mention is checked again on the server when the comment is saved. Mentions are saved as `@[Name](key)`, the same format as Warp Input's `MentionTextarea`, so `MentionEntry` and `Mentions::toPlainText()` read them — Warp Input is not required.
+
+- **DXF and DWG drawings.** `dxf()` accepts ASCII DXF uploads and converts them to PDF revisions (lines, circles, arcs, polylines, text, blocks, dimensions, with CAD layer visibility). `dwgConverter([...])` converts DWG through a converter you install on the server (LibreDWG `dwg2dxf` or ODA File Converter); no converter is bundled. The default upload field still accepts only PDF and images.
+
+### Fixed
+
+- Uploading a new revision for a drawing that cannot be opened (for example a drawing ID of another tenant sent from the browser) was refused, but the uploaded file stayed on the disk. It is now deleted.
+
+### Changed
+
+- New table `warp_markup_tool_presets` (migration `add_warp_markup_tool_presets_table`). Nothing else in the database changes, and nothing changes in your app until you use the new options.
+
 ## [1.6.1] - 2026-11-20
 
 ### Fixed

@@ -19,6 +19,7 @@ Open a floor plan, drop a pin on a crack, attach a photo, mark it fixed, upload 
 - [Drawings and revisions](#drawings-and-revisions)
 - [Searching the text of a drawing](#searching-the-text-of-a-drawing)
 - [Tools](#tools)
+- [Tool presets](#tool-presets)
 - [Layers](#layers)
 - [Areas (rooms)](#areas-rooms)
 - [Links between drawings](#links-between-drawings)
@@ -444,6 +445,10 @@ On a PDF revision, the **Pages** tab has a search box. It searches the text of e
 | `cloud` | Revision cloud around a change |
 | `arrow`, `line`, `polyline` | Arrow, line, connected lines (Shift for 15° steps) |
 | `ink`, `highlight` | Free pen and a translucent highlighter |
+| `text_highlight` | Translucent highlight over selected PDF text (opt in) |
+| `strikeout` | Line through selected PDF text (opt in) |
+| `underline` | Line below selected PDF text (opt in) |
+| `callout` | Arrow from an anchor point to a bordered text box; opt in with `tools([...])` |
 | `text`, `stamp` | Text with a white halo; stamps, see [Stamps](#stamps) |
 | `link` | A box that opens another drawing or page, see [Links between drawings](#links-between-drawings) |
 | `zone` | A named area (a room, a zone of a floor), see [Areas](#areas-rooms) |
@@ -455,6 +460,46 @@ Choose the tools a page offers (selection and moving are always there):
 ```php
 ->tools(['pin', 'cloud', 'arrow', 'text', 'dimension'])
 ```
+
+`callout` is available only when named in `tools([...])`; it is not part of the default toolbar:
+
+```php
+->tools([...\Qalainau\FilamentWarpMarkup\Support\Shapes::TOOLS, 'callout'])
+```
+
+Drag from the point to mark to the text box, then type. Empty notes are discarded. Double-click to edit; drag the shape to move it, or use its two handles to move the anchor and box separately. The box uses `color`, `width`, `size` and `fill` (white when omitted).
+
+### Mark PDF text
+
+Enable the text tools explicitly; they are not in the default toolbar:
+
+```php
+->tools([...\Qalainau\FilamentWarpMarkup\Support\Shapes::TOOLS, 'text_highlight', 'strikeout', 'underline'])
+```
+
+Choose a text tool and drag from the first character to the last, across lines in either direction. The selection appears while dragging; release to create the mark. These tools are enabled only on PDF pages with selectable text, and are unavailable for images and scanned pages without text.
+
+Text highlights default to yellow at 35% opacity, strikeouts to red and underlines to blue. Change the color with the existing color picker or save it as a tool preset. Select a mark to move it, change its color or delete it; undo works as for other shapes. Text marks have no resize handles. The selected text is stored in `text` (up to 2,000 characters) and appears in the text editor when opening the mark. A text mark stores `geometry.rects` as 1–500 `[x, y, width, height]` boxes in page coordinates. Carrying marks to a revision uses the same coordinate rules as other shapes.
+
+## Tool presets
+
+Save frequently used tool settings and recall them from the **Presets** menu. Applying a preset selects its tool and sets the appearance for the next shape.
+
+```php
+->toolPresets() // Personal presets only
+->toolPresets([
+    ['label' => 'Red cloud', 'tool' => 'cloud', 'style' => ['color' => '#dc2626', 'width' => 3]],
+    ['label' => 'Fix', 'tool' => 'stamp', 'stamp' => 'FIX'], // Include FIX in stamps()
+    ['label' => 'Socket', 'tool' => 'pin', 'code' => 'E1'],
+], personal: true)
+->toolPresets(fn () => [
+    ['label' => 'Blue note', 'tool' => 'text', 'style' => ['color' => '#0284c7', 'size' => 18]],
+], personal: false)
+```
+
+`toolPresets(bool|array|Closure $presets = true, bool|Closure $personal = true)` is disabled unless called; `false` disables it. Developer presets are shared, cannot be renamed or deleted by users, and must name an available tool, a label of 1–60 characters, a style array, and (when specified) a stamp from `stamps()`. Styles are normalized like shape styles. Invalid developer configuration throws `InvalidArgumentException`.
+
+Run `php artisan migrate` after upgrading to create **warp_markup_tool_presets** (the new `add_warp_markup_tool_presets_table` migration). Personal presets belong to the logged-in user and current tenant, with at most 50 per user and tenant. They can be saved, renamed and deleted from the menu. With `personal: false`, only developer presets appear. If the table has not been migrated, developer presets still work and personal saving is hidden. Personal presets for tools removed from `tools()` are hidden; remove unavailable tools from developer presets as well. Presets are hidden for viewers and anonymous shared links. No existing shapes are changed when applying a preset.
 
 ## Layers
 
@@ -641,6 +686,30 @@ Below the details of a finding is its timeline: when it was created, status and 
 ->photos(false)     // comments without photos
 ```
 
+### Mentions
+
+Notify someone directly from a finding's comment. Enable a user search on the workspace:
+
+```php
+use App\Models\User;
+use Illuminate\Database\Eloquent\Model;
+
+->mentions(fn (string $search, Model $finding) => User::query()
+    ->where('name', 'like', "%{$search}%")
+    ->limit(8)
+    ->get(), titleAttribute: 'name')
+```
+
+`mentions(?Closure $users, string $titleAttribute = 'name')` accepts a closure returning an iterable of user models. `$search` is the text after the active `@`; `$finding` is the finding being commented on. Type `@`, then choose a person with the arrow keys and Enter, or tap a result. Escape closes the list. The textarea shows `@Aiko Tanaka`; the stored activity body contains `@[Aiko Tanaka](12)`. This is the same format as Warp Input, so its `MentionEntry` and `Mentions::toPlainText()` can also read these comments. Warp Input is optional and is not required or imported by Markup.
+
+Candidates are limited to eight. The search endpoint requires permission to comment. Users implementing Filament's `HasTenants` must be allowed to access the current tenant; if the finding has a policy, candidates must also pass its `view` ability. Scope your query to the people who belong to the project or team; these checks supplement that query. Users without `HasTenants` are not filtered by tenant membership automatically.
+
+On save, Markup repeats the search using each stored label, checks the selected key against the eligible results, and refreshes the person's name. An unrecognized or inaccessible key becomes ordinary `@Name` text. Keep the search deterministic and include previously selected people when searching their full name. Names must contain 1–100 characters without `]` or a newline; user keys must contain 1–64 letters, digits, `_`, `-`, `:`, or `.`.
+
+Verified user keys are stored in the activity's `data.mentions` array alongside any photos. Each mentioned person receives one Filament database notification with the finding title, an 80-character comment excerpt, and the usual `findingUrl()` link. Self mentions do not notify; an assignee who receives a mention notification does not receive a second comment notification. Mention notifications work independently of `notifications()`. The user model needs Laravel's `Notifiable` trait, and the panel needs `databaseNotifications()` and the `notifications` table.
+
+Timeline mentions are highlighted and escaped. Reports, exports and shared pages show ordinary `@Name` text. Public shared-link comment forms do not offer candidates or send mention notifications. Omitting `mentions()` or passing `null` keeps the existing save behavior, without candidates or mention notifications.
+
 ## AI suggestions
 
 Optional, and off unless you turn it on:
@@ -793,7 +862,7 @@ Action::make('locate')
 
 sends [Filament database notifications](https://filamentphp.com/docs/5.x/notifications/database-notifications) to the assignee when someone else assigns a finding to them, comments on it or changes its status. The notification links to the finding (`findingUrl()` changes the link). The panel needs `->databaseNotifications()` and the `notifications` table.
 
-For anything else, listen to the events: `FindingCreated` (finding and its pin), `FindingStatusChanged` (finding, `from`, `to`) and `FindingCommented` (finding and the comment).
+For anything else, listen to the events: `FindingCreated` (finding and its pin), `FindingStatusChanged` (finding, `from`, `to`) `FindingCommented` (finding and the comment), and `FindingMentioned` (finding, comment activity, and a collection of unique verified user models, including self mentions). All event classes are in `Qalainau\FilamentWarpMarkup\Events`.
 
 ## The daily digest
 
@@ -1408,6 +1477,31 @@ test('a finding is placed on the drawing', async ({ page }) => {
 - The workspace does not replace its element when Livewire updates, but look it up each time anyway, as above. With several workspaces or form fields on one page, pick one with `document.querySelectorAll('.fi-warp-mk')[n]` (the form field also has the class `fi-warp-mk-field`).
 - The rest of the workspace is ordinary HTML: use Playwright locators for the toolbar (`.fi-warp-mk-tool-pin`, or the keyboard shortcuts), the findings list (`.fi-warp-mk-item`) and the details panel (`.fi-warp-mk-detail-title`).
 
+## DXF and DWG drawings
+
+Annotate CAD drawings directly in the workspace. Enable DXF explicitly; the default upload field still accepts only PDF and images. CAD uploads become PDF revisions with the original file name (for example `plan.dxf`) in the revision list. Source files are deleted after conversion; the revision tables stay the same.
+
+```php
+->dxf()
+->dxf(fonts: ['/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc'])
+
+// LibreDWG: install dwg2dxf on the server first.
+->dwgConverter(['dwg2dxf', '-o', '{output}', '{input}'])
+
+// ODA File Converter: install it separately on the server.
+->dwgConverter(['/usr/bin/ODAFileConverter', '{inputDir}', '{outputDir}', 'ACAD2018', 'DXF', '0', '1', '*.DWG'], timeout: 120)
+```
+
+`dxf(bool|Closure $condition = true, ?array $fonts = null)` accepts ASCII DXF. Binary DXF must be saved as ASCII first. `dwgConverter(?array $command, int $timeout = 120)` also enables DXF. Pass `null` to disable the DWG converter. No converter or mandatory dependency is bundled; follow the license of the converter you install.
+
+The command is an argument array passed to Symfony Process without a shell. Only arguments exactly equal to `{input}`, `{output}`, `{inputDir}`, or `{outputDir}` are replaced. File names are generated by the server, and temporary directories are removed on success, failure, and timeout. The converter must write `{output}` or a single `.dxf` file in `{outputDir}`. Conversion failures show a safe message; details go to the Laravel warning log.
+
+Lines, circles, arcs, polylines, text, blocks, and dimension blocks are drawn. CAD layer visibility is preserved. Only model space is imported: hatches, embedded images, and paper-space layouts are omitted. Unsupported entity types are reported after saving. DXF input is limited to 60 MB, 200,000 entities, and 20,000 points per polyline; the existing upload size limit also applies.
+
+English and other Windows-1252 text is stored as searchable PDF text. Japanese and other characters need GD and a font containing those characters. Omit `fonts` to search the same system font locations as `MarkupImage`, or supply font paths explicitly. Without a suitable font or GD, those text items are omitted and their count is shown after saving. These characters are rendered as images and cannot be searched in the PDF.
+
+The result is a PDF. Use **Set the scale** in the workspace to calibrate measurements as with any other PDF drawing. Page size is registered when the browser opens the PDF.
+
 ## All options
 
 | Method | Default | |
@@ -1423,7 +1517,8 @@ test('a finding is placed on the drawing', async ({ page }) => {
 | `for(Model\|Closure)` | — | Drawings of one record |
 | `drawings(Builder\|Closure)` | all | Which drawings can be opened |
 | `initialDrawing(int\|Closure)` / `focusFinding(...)` | first | What opens first |
-| `tools(array)` | all | Available tools |
+| `tools(array)` | `Shapes::TOOLS` | Available tools (`callout`, `text_highlight`, `strikeout` and `underline` require explicit opt in) |
+| `toolPresets(bool\|array\|Closure, personal: bool\|Closure)` | false | Shared and personal tool settings; migrate for personal saving |
 | `stamps(array)` | APPROVED, REJECTED, … | Stamps: text (with `{date}`, `{user}`) or images |
 | `zones(?string $attribute)` | — | Attribute that gets the name of the area a new finding is placed in |
 | `beforeStatusChange(?Closure)` | — | Check (and stop) status changes |
@@ -1439,10 +1534,13 @@ test('a finding is placed on the drawing', async ({ page }) => {
 | `canEdit(bool\|Closure)` | `true` | Drawing and findings allowed |
 | `canManageDrawings(bool\|Closure)` | `canEdit` | Uploading and deleting drawings |
 | `comments(bool)` / `photos(bool)` | `true` | Comment box and photos |
+| `dxf(bool\|Closure $condition = true, ?array $fonts = null)` | `false` | Accept ASCII DXF drawings and convert them to PDF |
+| `dwgConverter(?array $command, int $timeout = 120)` | `null`, 120 seconds | Convert DWG through a separately installed converter; also enables DXF |
 | `disk(?string, string $directory)` | Filament's default disk | Where drawings and photos are stored |
 | `scopeToTenant(bool\|Closure, ?string $relationship)` | on | Keep drawings and findings apart per tenant (see [Multi-tenancy](#multi-tenancy)) |
 | `report(bool, ?string $title, ?bool $browsershot)` | on | The findings report |
 | `modifyBrowsershotUsing(Closure)` | — | Configure Browsershot |
+| `mentions(?Closure, titleAttribute: 'name')` | off | Comment user search and mention notifications; closure receives `$search` and `$finding` |
 | `notifications(bool)` / `findingUrl(Closure)` | off | Database notifications to the assignee |
 | `height(string)` | fills the window below it (at least 640px on a wide screen, 85% of a phone screen) | Height of the workspace |
 | `poll(int $seconds)` | `20` | How often to look for other people's changes |
