@@ -2,6 +2,22 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.7.1] - 2026-11-25
+
+### Fixed
+
+- **With `toolPresets()`, the Presets button covered the right end of the bar above the drawing.** On a phone, the delete button of a selected markup sat under it and could not be tapped, and the presets menu opened off the left edge of the screen; on wide screens it hid the end of the common issue menu. The Presets button now sits in the bottom left corner of the drawing, and its menu opens upwards. Long entries in the menu (French “Enregistrer les réglages actuels comme préréglage”) wrap instead of making the menu scroll sideways.
+- **The common issue menu reached past the bar above the drawing** in languages with long issue names (German, French, Spanish, Italian, Brazilian Portuguese), hiding its arrow. On wide screens it now shrinks to the width of the bar.
+- The browser console could show `Cannot read properties of undefined (reading 'gone')` when loading the checklists of a drawing got no answer (for example when the request was cancelled). Nothing else changed on the screen.
+- **The hint of the chosen tool covered the zoom buttons.** It was squeezed to half the width of the drawing, so it grew tall and reached the zoom buttons in the bottom right corner (in every language). It now sits above them and is as wide as its text needs.
+- **The name of the Finding tool was cut off** in languages with a long name for it (Italian “Segnalazione”, Brazilian Portuguese “Apontamento”): on wide screens the tool now takes the width of both tool columns, so the whole name shows.
+
+### Changed
+
+- French: the revision menu says “Indice B” instead of the abbreviation “Ind. B”.
+- Spanish: the pin of a finding is called “marcador” everywhere (some help texts said “chincheta”).
+- **PDF drawings appear sooner.** When the first drawing of the page is a PDF, the workspace now starts downloading pdf.js and its worker together with the page, instead of one after the other once the workspace script has loaded. On a connection with 250 ms round trips, the first PDF page was drawn after 2.9 s and now after 2.2 s. Pages that open on an image drawing load nothing extra.
+
 ## [1.7.0] - 2026-11-23
 
 ### Added
