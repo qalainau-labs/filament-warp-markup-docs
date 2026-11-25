@@ -2,6 +2,23 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.8.0] - 2026-11-25
+
+### Removed
+
+- `AnthropicAssistant` and the automatic `services.anthropic.key` path. Bind an AI gateway to `warp.ai`, or pass your own `MarkupAssistant`.
+
+### Changed
+
+- `assistant()` uses the app's AI gateway and hides the AI controls when no gateway is bound.
+
+### Added
+
+- `GatewayAssistant` for photo suggestions and title block reading, with strict response schemas and safe gateway error messages.
+- `aiFeature()` to name the gateway's usage meter.
+- Availability checks: a gateway's `unavailable()` sentence disables both AI buttons and appears beside them and in their titles.
+- Real-model evaluation cases for both AI features.
+
 ## [1.7.1] - 2026-11-25
 
 ### Fixed

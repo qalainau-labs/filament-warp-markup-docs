@@ -65,7 +65,7 @@ Open a floor plan, drop a pin on a crack, attach a photo, mark it fixed, upload 
 | **For subcontractors** | A share link shows chosen findings to people without an account: they see where each one is and reply with comments, photos and “Fixed”. A portal link shows a subcontractor everything assigned to them, now and later. A daily digest tells each assignee what is overdue. |
 | **For the people in charge** | A summary by status, assignee, area and your own fields, with the open findings week by week. At handover, the owner signs by hand and the signature goes in the report. |
 | **Whole drawing sets** | Upload a set of files at once: files whose sheet number is already there become new revisions. Search the text of every PDF page, and keep architectural, MEP and site notes on layers you can hide. |
-| **AI, if you want it** | Optional: Claude (or your own model) suggests the common issue and a title from a site photo, and reads the sheet number and title from a title block. |
+| **AI, if you want it** | Optional: your AI gateway (or your own assistant) suggests the common issue and a title from a site photo, and reads the sheet number and title from a title block. |
 | **Out of the browser** | Export the marked-up PDF (your original PDF, with the markups on top) or a PNG — in the browser, without Chrome on the server. A findings report with a cover, numbered drawings, a crop around every finding and its photos, printable or as a PDF via Browsershot. The findings as CSV for Excel or BCF for BIM tools. |
 | **Browser tests** | A small JavaScript API for Playwright and other browser tests: where a point of the drawing is on the screen, which pins are shown and where, and a promise that waits until loading and saving have finished. |
 
@@ -715,19 +715,60 @@ Timeline mentions are highlighted and escaped. Reports, exports and shared pages
 Optional, and off unless you turn it on:
 
 ```php
-->assistant()   // Claude, with config('services.anthropic.key')
+->assistant()
+->aiFeature('project_inspection') // optional usage meter
 ```
 
-Add the key to `config/services.php`:
+**Which AI service is used.** An explicit `MarkupAssistant` instance or closure passed to `assistant()` takes priority. With no argument (or `true`), Markup uses `GatewayAssistant` when your app binds `warp.ai`; without a gateway it shows neither AI button. `false` and `null` turn it off. [Warp SaaS](https://warpui.com) supplies the gateway, chooses models, and counts and limits requests per company, person and feature. An app without Warp SaaS can bind its own gateway (below). `AnthropicAssistant` and the automatic `services.anthropic.key` fallback have been removed; move to `warp.ai` or pass your own assistant.
+
+- **Suggest from a photo (`finding`).** Open a photo in a finding's comments and press **Suggest with AI**. The photo bytes and MIME type, the keys, names and groups of your common issues, and the language for the answer are sent to the gateway. It returns a matching template (or none), a short title and a note. **Use in the form** opens the edit form; nothing is saved until Save. This feature requests the `smart` tier with `vision`.
+- **Read the title block (`title_block`).** In **Pages**, **Read the title block with AI** sends a crop of the lower right of the page, with its MIME type, to the gateway and names the page from the number and title (“A-101 · 1F floor plan”). It reads the revision too. This feature requests the `fast` tier with `vision`.
+
+Both requests use version `1`, plugin `markup`, a strict JSON schema, `max_output_tokens: 1024`, the current Filament tenant and signed-in user, and the app locale. Image text stays in `files`; `input` is always empty. The gateway receives no other drawing or finding data. Invalid values are discarded and long answers are shortened. Images are sent only when a user presses the button; the existing dialogs explain this before sending.
+
+`aiFeature(string|Closure|null)` sets the request's `meter`. Without it, the gateway counts `markup.finding` and `markup.title_block` separately. Before showing the controls, Markup calls the gateway's optional `unavailable(array $request): ?string` once per workspace object in a PHP request. A returned sentence disables both buttons and appears beside them and in their titles. Both server actions refuse the request with the same sentence. An exception's nonempty `userMessage()` is shown (limited to 300 characters); otherwise the translated failure message is shown. Only editors can ask, and each person can ask 20 times a minute (`Markup::AI_PER_MINUTE`).
+
+**Writing your own gateway without Warp SaaS.** Following the Input gateway example, the app owns the provider, model and credentials. This minimal gateway calls Anthropic directly; other providers can implement the same array contract. It does no metering or limiting:
 
 ```php
-'anthropic' => ['key' => env('ANTHROPIC_API_KEY')],
+// app/Ai/AiGateway.php
+namespace App\Ai;
+
+use Illuminate\Support\Facades\Http;
+use RuntimeException;
+
+class AiGateway
+{
+    public function ask(array $request): array
+    {
+        $content = array_map(fn (array $file): array => [
+            'type' => 'image',
+            'source' => ['type' => 'base64', 'media_type' => $file['mime'], 'data' => base64_encode($file['contents'])],
+        ], $request['files'] ?? []);
+        if ($request['input'] !== '') {
+            $content[] = ['type' => 'text', 'text' => $request['input']];
+        }
+        $response = Http::timeout(90)
+            ->withHeaders(['x-api-key' => config('services.anthropic.key'), 'anthropic-version' => '2023-06-01'])
+            ->post('https://api.anthropic.com/v1/messages', [
+                'model' => config('services.anthropic.models.'.$request['tier']),
+                'max_tokens' => $request['max_output_tokens'],
+                'system' => $request['instructions'],
+                'output_config' => ['format' => ['type' => 'json_schema', 'schema' => $request['schema']]],
+                'messages' => [['role' => 'user', 'content' => $content]],
+            ])->throw();
+        $text = collect($response->json('content'))->firstWhere('type', 'text')['text'] ?? '';
+        $data = json_decode($text, true);
+
+        return is_array($data) ? ['data' => $data] : throw new RuntimeException('No answer.');
+    }
+}
+
+// AppServiceProvider::register():
+$this->app->singleton('warp.ai', \App\Ai\AiGateway::class);
 ```
 
-- **Suggest from a photo.** Open a photo in a finding's comments and press **Suggest with AI**. The photo and the names of your common issues are sent to the model; it answers with the common issue that fits (or none), a short title in the user's language and one sentence about what it sees. **Use in the form** opens the finding's edit form with the template's values and the title filled in — nothing is saved until the user presses Save, and the dialog reminds them to check.
-- **Read the title block.** In the **Pages** tab, **Read the title block with AI** crops the lower right of the page, sends it to the model and names the page from the sheet number and title it reads (“A-101 · 1F floor plan”). Useful for scanned drawings, where there is no text to read.
-
-The default model is `claude-haiku-5-5`, the small and quick one. Choose another with `->assistant(new AnthropicAssistant('claude-sonnet-5-5'))`. Only people who may edit the finding (or, for title blocks, the drawing) can ask, and only images of the finding or the page are sent. Each person can ask 20 times a minute (`Markup::AI_PER_MINUTE`), so a script cannot run up your API bill.
+Configure your key and `services.anthropic.models.fast` / `.smart` in the app. Markup itself never reads that configuration. A gateway exception may expose `userMessage(): string` for a safe message to the user.
 
 **Your own model.** Implement `MarkupAssistant` (photos) and, if it can read title blocks, `ReadsTitleBlocks`:
 
@@ -1530,7 +1571,8 @@ The result is a PDF. Use **Set the scale** in the workspace to calibrate measure
 | `layers(array\|Closure)` | — | Layers for markups, shown and hidden per person |
 | `summary(bool\|Closure)` / `summaryGroups(array\|Closure)` | on / — | The summary, and your own fields to count by |
 | `signOff(bool\|Closure, ?string $statement)` | off | Hand-written sign-off at handover |
-| `assistant(MarkupAssistant\|Closure\|bool)` | off | AI suggestions (`true` = Claude) |
+| `aiFeature(string\|Closure\|null)` | none | Optional gateway usage meter |
+| `assistant(MarkupAssistant\|Closure\|bool\|null)` | off | AI suggestions (`true` = `warp.ai` when bound) |
 | `canEdit(bool\|Closure)` | `true` | Drawing and findings allowed |
 | `canManageDrawings(bool\|Closure)` | `canEdit` | Uploading and deleting drawings |
 | `comments(bool)` / `photos(bool)` | `true` | Comment box and photos |
