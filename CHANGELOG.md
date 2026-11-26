@@ -2,6 +2,15 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.8.1] - 2026-11-26
+
+### Fixed
+
+- **On a resource page (the “Drawings of one record” setup), uploading a drawing failed with a server error** in apps that use `Model::preventAccessingMissingAttributes()` (or `Model::shouldBeStrict()`): “Upload a drawing”, “Upload a new revision” and “Upload a drawing set” read a `file` attribute from the page's record. The drawing actions no longer use the page's record.
+- **On a resource page, deleting a finding that was already gone could delete the page's record.** When the finding of the Delete button no longer existed (another person had deleted it, or the key belonged to another record), the delete fell back to the record of the page — for example the project — and deleted it if the user was allowed to. Editing such a finding could likewise change the page's record. Edit and delete now only act on a finding that this page can open, and do nothing otherwise.
+- On a resource page, deleting a finding took you to the list of the resource. You now stay on the drawing.
+- **Large DXF drawings could stop PHP with an out-of-memory error** (with `dxf()`, since 1.7.0). Reading a DXF of 100,000 lines needed about 560 MB, and even refusing a file over the 200,000-entity limit needed about 380 MB, so with PHP's default `memory_limit` of 128 MB the upload failed with a server error instead of a message. The reader now goes through the file without keeping every line: about 100 MB for 100,000 lines, and a file over the limit is refused almost at once. Drawings come out exactly as before.
+
 ## [1.8.0] - 2026-11-25
 
 ### Removed
