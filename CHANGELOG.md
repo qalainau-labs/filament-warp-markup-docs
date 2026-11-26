@@ -2,6 +2,12 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [1.8.2] - 2026-11-27
+
+### Fixed
+
+- In the sign-off dialog, a signature drawn right after the dialog opened could be lost on a slow connection, and sending then asked for a signature. The signature pad is now ready as soon as the dialog opens, without waiting for the list of earlier sign-offs.
+
 ## [1.8.1] - 2026-11-26
 
 ### Fixed
