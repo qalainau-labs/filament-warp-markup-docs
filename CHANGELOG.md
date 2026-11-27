@@ -4,6 +4,12 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.8.4] - 2026-11-28
+
+### Fixed
+
+- **Opening a finding right after “Back to the list” could stop the workspace with “Cannot read properties of undefined (reading 'gone')”**: when the server's answer to a call from the drawing page did not come back (Livewire dropped or cancelled it, which happens under load), the page read a reply that was not there. Every call now goes through one place: a read with no answer is asked once more, and if there is still no answer the page stays as it was (the finding panel goes back to the list instead of staying empty). A save, comment or status change with no answer is not sent twice.
+
 ## [1.8.3] - 2026-11-27
 
 ### Fixed
