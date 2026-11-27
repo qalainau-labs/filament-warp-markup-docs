@@ -2,6 +2,16 @@
 
 All notable changes to `qalainau/filament-warp-markup` are documented here.
 
+## [Unreleased]
+
+## [1.8.3] - 2026-11-27
+
+### Fixed
+
+- **Saving a window for a finding or drawing someone else had just deleted did nothing**: with the edit or delete window of a finding, or “Rename this drawing”, “Delete this drawing”, “Upload a new revision” or “Remove the latest revision” open, if another person deleted that finding or drawing (or it moved to another team), pressing the button left the window open and nothing happened. The window now closes with “This item no longer exists. Someone else may have deleted it.”, and the drawing is reloaded.
+- **Pressing “Create” in the new finding window after the drawing or revision was deleted, or “Create link” after every chosen finding was deleted, kept the window open**: each press showed “This page no longer exists.” or “Choose at least one finding to share.” again. The window now closes with “This item no longer exists. Someone else may have deleted it.”, and the drawing or list is reloaded. A link for everything assigned to one person is still made.
+- **“Change findings” said “0 findings changed” when every chosen finding had been deleted meanwhile**: it now says “This item no longer exists. Someone else may have deleted it.”, like the other windows. If only some were deleted, the rest are still changed.
+
 ## [1.8.2] - 2026-11-27
 
 ### Fixed
