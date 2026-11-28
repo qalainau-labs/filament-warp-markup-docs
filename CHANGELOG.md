@@ -4,6 +4,12 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.8.5] - 2026-11-28
+
+### Fixed
+
+- **Changing a finding's status on a busy server could stop without telling you anything**: when Livewire ended the call without its answer, the finding kept showing its old status with no message, although the server had changed it. A yellow message now says the change could not be confirmed, and the finding is reloaded so it shows the status that was saved. The same happens for renaming a page or setting its scale, revoking a share, starting, recording, completing or deleting an inspection, and deleting a sign-off. Saving a tool preset, a comment, a sign-off or a photo drawing with no answer no longer says it failed (it may have been saved, and trying again made a copy): it shows the same message and reloads. Nothing is sent twice.
+
 ## [1.8.4] - 2026-11-28
 
 ### Fixed
