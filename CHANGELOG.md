@@ -4,6 +4,12 @@ All notable changes to `qalainau/filament-warp-markup` are documented here.
 
 ## [Unreleased]
 
+## [1.8.6] - 2026-11-28
+
+### Fixed
+
+- **Text is easier to read when the panel color is a light one (Amber, Yellow, Lime, Green…)**: links, pressed buttons and segments, the chosen tool's name and the “Placing: …” label of an inspection used the panel's primary-600, which reads at only 2.5–3.2:1 with those colors. Links now use primary-700 and text on the light primary background of a pressed control uses primary-800, so every Filament color reads at 4.5:1 or more. Dark mode, icons, outlines and the pressed background are unchanged.
+
 ## [1.8.5] - 2026-11-28
 
 ### Fixed
